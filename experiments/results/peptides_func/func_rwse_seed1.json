@@ -1,0 +1,77 @@
+{
+ "task": "func",
+ "pe": "rwse",
+ "bias": false,
+ "seed": 1,
+ "epochs": 100,
+ "epochs_run": 100,
+ "time_capped": false,
+ "best_epoch": 60,
+ "val": 0.5407176962772176,
+ "test": 0.5135389559735014,
+ "params": 401102,
+ "peak_gpu_gb": 1.0785903930664062,
+ "width": {
+  "[1,5)": {
+   "n": 29,
+   "metric": 0.39724613488213834
+  },
+  "[5,20)": {
+   "n": 538,
+   "metric": 0.4786611547111505
+  },
+  "[20,inf)": {
+   "n": 1764,
+   "metric": 0.4828608594951741
+  }
+ },
+ "diam": {
+  "[1,10)": {
+   "n": 21,
+   "metric": 0.5892857142857143
+  },
+  "[10,30)": {
+   "n": 426,
+   "metric": 0.427770283243209
+  },
+  "[30,inf)": {
+   "n": 1884,
+   "metric": 0.4876825157141047
+  }
+ },
+ "size": {
+  "[0,103.66666666666663)": {
+   "n": 777,
+   "metric": 0.4843996073269339
+  },
+  "[103.66666666666663,176.0)": {
+   "n": 773,
+   "metric": 0.47998637298940816
+  },
+  "[176.0,inf)": {
+   "n": 781,
+   "metric": 0.48638872319311194
+  }
+ },
+ "config": {
+  "task": "func",
+  "pe": "rwse",
+  "bias": false,
+  "seed": 1,
+  "epochs": 100,
+  "bs": 128,
+  "lr": 0.0003,
+  "wd": 0.0,
+  "dim": 96,
+  "layers": 4,
+  "heads": 4,
+  "dropout": 0.0,
+  "attn_dropout": 0.5,
+  "warmup": 5,
+  "root": "data",
+  "out": "experiments/results/peptides_func",
+  "fake": false,
+  "max_minutes": 30.0,
+  "force": false
+ }
+}

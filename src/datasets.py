@@ -1,3 +1,5 @@
+import hashlib
+import inspect
 import os
 import pickle
 import random
@@ -92,11 +94,21 @@ def load_splits(task, root, fake):
     return out
 
 
+def cache_version():
+    src = "".join(inspect.getsource(f) for f in (greedy_path_cover, random_tracks, precompute_graph))
+    src += f"|{K_LAP}|{K_RW}|{COVER_SEED}"
+    return hashlib.sha256(src.encode()).hexdigest()[:16]
+
+
 def get_caches(splits, task, root, fake):
     path = os.path.join(root, f"pe_cache_{task}{'_fake' if fake else ''}.pkl")
+    version = cache_version()
     if os.path.exists(path):
         with open(path, "rb") as f:
-            return pickle.load(f)
+            obj = pickle.load(f)
+        if isinstance(obj, dict) and obj.get("version") == version:
+            return obj["caches"]
+        print("PE cache is missing a version or is outdated; rebuilding.", flush=True)
     print("Precomputing PEs / path covers (one-off, cached)...", flush=True)
     t0 = time.time()
     caches = []
@@ -105,7 +117,7 @@ def get_caches(splits, task, root, fake):
         print(f"  split {si}: {len(split)} graphs, {time.time() - t0:.0f}s", flush=True)
     os.makedirs(root, exist_ok=True)
     with open(path, "wb") as f:
-        pickle.dump(caches, f)
+        pickle.dump({"version": version, "caches": caches}, f)
     return caches
 
 

@@ -29,20 +29,40 @@ def ms(vals):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--dir", default="results")
+    ap.add_argument("--dir", default=None,
+                    help="result folder (default: experiments/results/peptides_<task>)")
     ap.add_argument("--task", default="func")
     ap.add_argument("--ref", default="pcpe", help="variant whose gap we report")
     ap.add_argument("--base", default="lap", help="baseline variant")
     args = ap.parse_args()
+    if args.dir is None:
+        args.dir = os.path.join("experiments", "results", f"peptides_{args.task}")
 
-    runs = [json.load(open(p)) for p in sorted(glob.glob(os.path.join(args.dir, "*.json")))]
+    runs = []
+    for p in sorted(glob.glob(os.path.join(args.dir, "*.json"))):
+        r = json.load(open(p))
+        r["_file"] = p
+        runs.append(r)
     runs = [r for r in runs if r["task"] == args.task]
     if not runs:
         raise SystemExit("no matching results found")
     name = lambda r: r["pe"] + ("+bias" if r["bias"] else "")
     by = defaultdict(dict)                      # variant -> seed -> run
     for r in runs:
+        if r["seed"] in by[name(r)]:
+            raise SystemExit(f"duplicate run for variant '{name(r)}', seed {r['seed']}: "
+                             f"{by[name(r)][r['seed']]['_file']} and {r['_file']}")
         by[name(r)][r["seed"]] = r
+
+    all_runs = [r for seeds in by.values() for r in seeds.values()]
+    ref_run = all_runs[0]
+    for r in all_runs[1:]:
+        for g in ("width", "diam", "size"):
+            c_ref = {b: v["n"] for b, v in ref_run[g].items()}
+            c = {b: v["n"] for b, v in r[g].items()}
+            if c != c_ref:
+                raise SystemExit(f"inconsistent '{g}' bin counts between {ref_run['_file']} {c_ref} "
+                                 f"and {r['_file']} {c}")
 
     metric_name = "AP (higher better)" if args.task == "func" else "MAE (lower better)"
     print(f"\n=== {args.task}: {metric_name} ===")

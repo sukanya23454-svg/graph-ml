@@ -26,6 +26,7 @@ Real run (downloads Peptides through PyG on first use):
     python -m src.lrgb_pcpe --task func --pe pcpe --seed 0 --epochs 100
 """
 import argparse
+import copy
 import json
 import math
 import os
@@ -61,10 +62,15 @@ def main():
     ap.add_argument("--attn_dropout", type=float, default=0.5)
     ap.add_argument("--warmup", type=int, default=5)
     ap.add_argument("--root", default="data")
-    ap.add_argument("--out", default="results")
+    ap.add_argument("--out", default=None,
+                    help="result folder (default: experiments/results/peptides_<task>)")
     ap.add_argument("--fake", action="store_true")
+    ap.add_argument("--max_minutes", type=float, default=None,
+                    help="stop training after this many minutes; best-val checkpoint is still used")
     ap.add_argument("--force", action="store_true", help="rerun even if the result file exists")
     args = ap.parse_args()
+    if args.out is None:
+        args.out = os.path.join("experiments", "results", f"peptides_{args.task}")
     if args.bias and not args.pe.startswith("pcpe"):
         raise SystemExit("--bias needs a pcpe* variant")
     tag = f"{args.task}_{args.pe}{'_bias' if args.bias else ''}_seed{args.seed}"
@@ -104,9 +110,9 @@ def main():
     sched = torch.optim.lr_scheduler.LambdaLR(opt, lr_lambda)
     higher_better = args.task == "func"
     best = (-1e9 if higher_better else 1e9)
-    best_ep, best_test, best_val, best_P = -1, None, None, None
-    Y_test = None
+    best_ep, best_val, best_state = -1, None, None
 
+    t_start, capped, epochs_run = time.time(), False, 0
     for ep in range(args.epochs):
         model.train()
         t0, tot = time.time(), 0.0
@@ -123,14 +129,24 @@ def main():
         sched.step()
 
         Pv, Yv = predict(model, va, dev)
-        Pt, Yt = predict(model, te, dev)
-        v, t = metric(args.task, Pv, Yv), metric(args.task, Pt, Yt)
+        v = metric(args.task, Pv, Yv)
         better = v > best if higher_better else v < best
         if better:
-            best, best_ep, best_val, best_test, best_P, Y_test = v, ep, v, t, Pt, Yt
+            best, best_ep, best_val = v, ep, v
+            best_state = copy.deepcopy(model.state_dict())
         if ep % 5 == 0 or ep == args.epochs - 1:
-            print(f"ep {ep:3d} loss {tot / len(data[0]):.4f} val {v:.4f} test {t:.4f} "
+            print(f"ep {ep:3d} loss {tot / len(data[0]):.4f} val {v:.4f} "
                   f"({time.time() - t0:.1f}s/epoch)", flush=True)
+        epochs_run = ep + 1
+        if args.max_minutes is not None and (time.time() - t_start) / 60 > args.max_minutes:
+            capped = True
+            print(f"TIME CAP reached after {epochs_run} of {args.epochs} epochs", flush=True)
+            break
+
+    # test set is evaluated exactly once, on the checkpoint selected by validation
+    model.load_state_dict(best_state)
+    best_P, Y_test = predict(model, te, dev)
+    best_test = metric(args.task, best_P, Y_test)
 
     widths = np.array([d.width.item() for d in data[2]])
     diams = np.array([d.diam.item() for d in data[2]])
@@ -140,7 +156,7 @@ def main():
 
     result = {
         "task": args.task, "pe": args.pe, "bias": args.bias, "seed": args.seed,
-        "epochs": args.epochs, "best_epoch": best_ep, "val": best_val, "test": best_test,
+        "epochs": args.epochs, "epochs_run": epochs_run, "time_capped": capped, "best_epoch": best_ep, "val": best_val, "test": best_test,
         "params": n_params,
         "peak_gpu_gb": (torch.cuda.max_memory_allocated() / 2 ** 30) if dev.type == "cuda" else 0.0,
         "width": stratify(args.task, best_P, Y_test, widths, WIDTH_BINS),
